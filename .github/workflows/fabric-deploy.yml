@@ -100,7 +100,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: AlexandeRiverou/amentum-devops-templates/.github/workflows/fabric-sync-workspace.yml@main
+    uses: AlexandeRiverou/fabric-devops-templates/.github/workflows/fabric-sync-workspace.yml@main
     with:
       azure_client_id: ${{ inputs.azure_client_id }}
       azure_tenant_id: ${{ inputs.azure_tenant_id }}
@@ -115,7 +115,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: AlexandeRiverou/amentum-devops-templates/.github/workflows/fabric-promote-to-stage.yml@main
+    uses: AlexandeRiverou/fabric-devops-templates/.github/workflows/fabric-promote-to-stage.yml@main
     with:
       azure_client_id: ${{ inputs.azure_client_id }}
       azure_tenant_id: ${{ inputs.azure_tenant_id }}
@@ -135,7 +135,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: AlexandeRiverou/amentum-devops-templates/.github/workflows/fabric-execute-notebook.yml@main
+    uses: AlexandeRiverou/fabric-devops-templates/.github/workflows/fabric-execute-notebook.yml@main
     with:
       azure_client_id: ${{ inputs.azure_client_id }}
       azure_tenant_id: ${{ inputs.azure_tenant_id }}
@@ -152,7 +152,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: AlexandeRiverou/amentum-devops-templates/.github/workflows/fabric-promote-to-stage.yml@main
+    uses: AlexandeRiverou/fabric-devops-templates/.github/workflows/fabric-promote-to-stage.yml@main
     with:
       azure_client_id: ${{ inputs.azure_client_id }}
       azure_tenant_id: ${{ inputs.azure_tenant_id }}
@@ -172,7 +172,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: AlexandeRiverou/amentum-devops-templates/.github/workflows/fabric-execute-notebook.yml@main
+    uses: AlexandeRiverou/fabric-devops-templates/.github/workflows/fabric-execute-notebook.yml@main
     with:
       azure_client_id: ${{ inputs.azure_client_id }}
       azure_tenant_id: ${{ inputs.azure_tenant_id }}
