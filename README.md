@@ -239,7 +239,7 @@ consuming repository and copy
 `scripts/fabric/` path, and copy `scripts/fabric/authenticate.ps1` to that directory too.
 The reusable workflow checks out and runs the scripts at those fixed paths; it has no
 script-path input.
-Replace `OWNER/amentum-devops-templates` and `<PINNED_COMMIT_SHA>` in the caller
+Replace `OWNER/fabric-devops-templates` and `<PINNED_COMMIT_SHA>` in the caller
 with the template repository and reviewed commit. The example's manual `test` or
 `prod` choice selects the corresponding target stage and protected GitHub Environment.
 

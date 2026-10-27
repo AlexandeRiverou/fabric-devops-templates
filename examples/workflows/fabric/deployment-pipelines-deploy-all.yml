@@ -29,7 +29,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: OWNER/amentum-devops-templates/.github/workflows/fabric-deployment-pipelines-deploy-all.yml@<PINNED_COMMIT_SHA>
+    uses: OWNER/fabric-devops-templates/.github/workflows/fabric-deployment-pipelines-deploy-all.yml@<PINNED_COMMIT_SHA>
     with:
       azure_client_id: ${{ vars.AZURE_CLIENT_ID }}
       azure_tenant_id: ${{ vars.AZURE_TENANT_ID }}
