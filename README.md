@@ -143,8 +143,7 @@ credentials to `pull_request` workflows.
 | --- | --- | --- |
 | `azure_client_id`, `azure_tenant_id` | Yes | Entra application and tenant IDs used for OIDC; not secret. |
 | `pipeline_name`, `dev_workspace_name` | Yes | Deployment Pipeline name and the dev workspace synced from Git. |
-| `dev_/test_/prod_stage_name` | No | Stage names; default `Development`, `Test`, `Production`. |
-| `dev_/test_/prod_github_environment` | No | Caller environments; default `fabric-dev`, `fabric-test`, `fabric-prod`. |
+| `dev_/test_/prod_stage_name` | No | Stage names and matching caller GitHub Environment names; defaults are `Development`, `Test`, `Production`. |
 | `test_workspace_id`, `prod_workspace_id` | No | Needed only to run the notebook after test/prod deployment. |
 | `notebook_name` | No | Notebook run after each environment update; empty skips. |
 | `excluded_resource_types`, `excluded_folder_reference` | No | Exclusions for test/prod selective deployment. |
@@ -153,6 +152,9 @@ credentials to `pull_request` workflows.
 No GitHub secret is required by the template. OIDC requires `id-token: write` on the
 caller job and matching Entra federation. The client and tenant IDs can be supplied
 from GitHub Actions variables; do not put a client secret in the caller.
+Create caller GitHub Environments whose names match the configured stage names
+(`Development`, `Test`, and `Production` by default), and configure production
+approvals and Entra federation for the matching Environment.
 
 The lock is generated for Python 3.12 on 64-bit Linux using:
 

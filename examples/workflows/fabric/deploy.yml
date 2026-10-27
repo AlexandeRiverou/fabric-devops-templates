@@ -29,9 +29,6 @@ jobs:
       dev_stage_name: Development
       test_stage_name: Test
       prod_stage_name: Production
-      dev_github_environment: fabric-dev
-      test_github_environment: fabric-test
-      prod_github_environment: fabric-prod
       test_workspace_id: ${{ vars.FABRIC_TEST_WORKSPACE_ID }}
       prod_workspace_id: ${{ vars.FABRIC_PROD_WORKSPACE_ID }}
       notebook_name: PostDeployNotebook

@@ -41,21 +41,6 @@ on:
         required: false
         type: string
         default: Production
-      dev_github_environment:
-        description: Caller GitHub Environment for dev.
-        required: false
-        type: string
-        default: fabric-dev
-      test_github_environment:
-        description: Caller GitHub Environment for test.
-        required: false
-        type: string
-        default: fabric-test
-      prod_github_environment:
-        description: Caller GitHub Environment for prod; configure required reviewers.
-        required: false
-        type: string
-        default: fabric-prod
       test_workspace_id:
         description: Test workspace ID; required only to run the notebook after the test deployment.
         required: false
@@ -104,7 +89,7 @@ jobs:
     with:
       azure_client_id: ${{ inputs.azure_client_id }}
       azure_tenant_id: ${{ inputs.azure_tenant_id }}
-      github_environment: ${{ inputs.dev_github_environment }}
+      github_environment: ${{ inputs.dev_stage_name }}
       workspace_name: ${{ inputs.dev_workspace_name }}
       notebook_name: ${{ inputs.notebook_name }}
       timeout_minutes: ${{ inputs.timeout_minutes }}
@@ -119,7 +104,7 @@ jobs:
     with:
       azure_client_id: ${{ inputs.azure_client_id }}
       azure_tenant_id: ${{ inputs.azure_tenant_id }}
-      github_environment: ${{ inputs.test_github_environment }}
+      github_environment: ${{ inputs.test_stage_name }}
       pipeline_name: ${{ inputs.pipeline_name }}
       source_stage_name: ${{ inputs.dev_stage_name }}
       target_stage_name: ${{ inputs.test_stage_name }}
@@ -139,7 +124,7 @@ jobs:
     with:
       azure_client_id: ${{ inputs.azure_client_id }}
       azure_tenant_id: ${{ inputs.azure_tenant_id }}
-      github_environment: ${{ inputs.test_github_environment }}
+      github_environment: ${{ inputs.test_stage_name }}
       workspace_id: ${{ inputs.test_workspace_id }}
       notebook_name: ${{ inputs.notebook_name }}
       timeout_minutes: ${{ inputs.timeout_minutes }}
@@ -156,7 +141,7 @@ jobs:
     with:
       azure_client_id: ${{ inputs.azure_client_id }}
       azure_tenant_id: ${{ inputs.azure_tenant_id }}
-      github_environment: ${{ inputs.prod_github_environment }}
+      github_environment: ${{ inputs.prod_stage_name }}
       pipeline_name: ${{ inputs.pipeline_name }}
       source_stage_name: ${{ inputs.test_stage_name }}
       target_stage_name: ${{ inputs.prod_stage_name }}
@@ -176,7 +161,7 @@ jobs:
     with:
       azure_client_id: ${{ inputs.azure_client_id }}
       azure_tenant_id: ${{ inputs.azure_tenant_id }}
-      github_environment: ${{ inputs.prod_github_environment }}
+      github_environment: ${{ inputs.prod_stage_name }}
       workspace_id: ${{ inputs.prod_workspace_id }}
       notebook_name: ${{ inputs.notebook_name }}
       timeout_minutes: ${{ inputs.timeout_minutes }}
