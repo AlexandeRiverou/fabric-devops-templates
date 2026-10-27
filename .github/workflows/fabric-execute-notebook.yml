@@ -1,0 +1,117 @@
+name: Execute Microsoft Fabric notebook
+
+on:
+  workflow_call:
+    inputs:
+      azure_client_id:
+        description: Entra application (service principal) client ID; not a secret.
+        required: true
+        type: string
+      azure_tenant_id:
+        description: Entra tenant ID.
+        required: true
+        type: string
+      github_environment:
+        description: Protected caller-repository environment used for approvals and OIDC subject.
+        required: true
+        type: string
+      workspace_id:
+        description: Microsoft Fabric workspace ID (GUID).
+        required: true
+        type: string
+      notebook_name:
+        description: Display name of the notebook to run; must be unique in the workspace.
+        required: true
+        type: string
+      parameters_json:
+        description: Optional JSON object of notebook parameters.
+        required: false
+        type: string
+        default: ""
+      spark_conf_json:
+        description: Optional JSON object of Spark session configuration.
+        required: false
+        type: string
+        default: ""
+      timeout_minutes:
+        description: Maximum run time in minutes before cancellation is requested.
+        required: false
+        type: number
+        default: 30
+      polling_interval_seconds:
+        description: Seconds between job status checks.
+        required: false
+        type: number
+        default: 30
+      wait_for_completion:
+        description: Wait for the notebook job to finish.
+        required: false
+        type: boolean
+        default: true
+
+permissions: {}
+
+jobs:
+  execute:
+    name: Execute Fabric notebook
+    if: ${{ github.event_name != 'pull_request' && github.event_name != 'pull_request_target' }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.github_environment }}
+    timeout-minutes: 360
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: fabric-notebook-${{ github.repository }}-${{ inputs.workspace_id }}-${{ inputs.notebook_name }}
+      cancel-in-progress: false
+    steps:
+      - name: Require a protected caller ref
+        shell: pwsh
+        env:
+          REF_PROTECTED: ${{ github.ref_protected }}
+        run: |
+          if ($env:REF_PROTECTED -ne 'true') {
+            Write-Error 'ERROR: Fabric notebook execution must run from a protected branch or tag.'
+            exit 1
+          }
+
+      - name: Check out caller repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          persist-credentials: false
+
+      - name: Sign in to Azure with GitHub OIDC
+        uses: Azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2
+        with:
+          client-id: ${{ inputs.azure_client_id }}
+          tenant-id: ${{ inputs.azure_tenant_id }}
+          allow-no-subscriptions: true
+
+      - name: Authenticate and get Fabric access token
+        shell: pwsh
+        env:
+          FABRIC_TENANT_ID: ${{ inputs.azure_tenant_id }}
+          FABRIC_CLIENT_ID: ${{ inputs.azure_client_id }}
+          FABRIC_PRINCIPAL_TYPE: AzureCLI
+        run: |
+          & ./scripts/fabric/authenticate.ps1
+
+      - name: Run notebook and wait for Fabric job
+        shell: pwsh
+        env:
+          FABRIC_WORKSPACE_ID: ${{ inputs.workspace_id }}
+          FABRIC_NOTEBOOK_NAME: ${{ inputs.notebook_name }}
+          FABRIC_NOTEBOOK_PARAMETERS_JSON: ${{ inputs.parameters_json }}
+          FABRIC_SPARK_CONF_JSON: ${{ inputs.spark_conf_json }}
+          FABRIC_TIMEOUT_MINUTES: ${{ inputs.timeout_minutes }}
+          FABRIC_POLL_INTERVAL_SECONDS: ${{ inputs.polling_interval_seconds }}
+          FABRIC_WAIT_FOR_COMPLETION: ${{ inputs.wait_for_completion }}
+        run: |
+          & ./scripts/fabric/execute-notebook.ps1
+
+      - name: Clear Fabric access token
+        if: ${{ always() }}
+        shell: pwsh
+        run: |
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value 'FABRIC_ACCESS_TOKEN='
+          Remove-Item Env:\FABRIC_ACCESS_TOKEN -ErrorAction SilentlyContinue

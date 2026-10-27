@@ -1,0 +1,44 @@
+name: Deploy all Microsoft Fabric DEV content to TEST or PROD (example)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deployment pipeline target stage
+        required: true
+        type: choice
+        options:
+          - test
+          - prod
+      deployment_note:
+        description: Optional deployment note (no secrets)
+        required: false
+        type: string
+        default: ""
+      what_if:
+        description: Preview only; do not send the deploy request
+        required: false
+        type: boolean
+        default: false
+
+permissions: {}
+
+jobs:
+  deploy-all:
+    name: Deploy all DEV content to ${{ inputs.target }}
+    permissions:
+      contents: read
+      id-token: write
+    uses: OWNER/amentum-devops-templates/.github/workflows/fabric-deployment-pipelines-deploy-all.yml@<PINNED_COMMIT_SHA>
+    with:
+      azure_client_id: ${{ vars.AZURE_CLIENT_ID }}
+      azure_tenant_id: ${{ vars.AZURE_TENANT_ID }}
+      github_environment: ${{ inputs.target == 'prod' && 'fabric-prod' || 'fabric-test' }}
+      pipeline_name: ${{ vars.FABRIC_DEPLOYMENT_PIPELINE_NAME }}
+      source_stage_name: ${{ vars.FABRIC_DEV_STAGE_NAME }}
+      target_stage_name: ${{ vars[inputs.target == 'prod' && 'FABRIC_PROD_STAGE_NAME' || 'FABRIC_TEST_STAGE_NAME'] }}
+      deployment_note: ${{ inputs.deployment_note }}
+      timeout_minutes: 60
+      what_if: ${{ inputs.what_if }}
+    # The called workflow binds the job to fabric-test or fabric-prod. Configure
+    # approval rules on both GitHub Environments, especially fabric-prod.

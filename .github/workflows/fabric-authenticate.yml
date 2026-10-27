@@ -1,0 +1,79 @@
+name: Authenticate to Microsoft Fabric
+
+on:
+  workflow_call:
+    inputs:
+      principal_type:
+        description: Authentication mode, ServicePrincipal or UserPrincipal.
+        required: false
+        type: string
+        default: ServicePrincipal
+      github_environment:
+        description: Caller repository environment that holds the secrets.
+        required: true
+        type: string
+      authentication_script:
+        description: Path to the PowerShell authentication script in the caller's repository.
+        required: false
+        type: string
+        default: scripts/fabric/authenticate.ps1
+    secrets:
+      tenant_id:
+        description: Entra tenant ID.
+        required: true
+      client_id:
+        description: Application (client) ID.
+        required: true
+      client_secret:
+        description: Client secret; required for ServicePrincipal.
+        required: false
+      username:
+        description: User name; required for UserPrincipal.
+        required: false
+      password:
+        description: Password; required for UserPrincipal.
+        required: false
+
+permissions: {}
+
+jobs:
+  authenticate:
+    name: Authenticate and get Power BI access token
+    if: ${{ github.event_name != 'pull_request' && github.event_name != 'pull_request_target' }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.github_environment }}
+    permissions:
+      contents: read
+    steps:
+      - name: Check out caller repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Authenticate and get Power BI access token
+        shell: pwsh
+        env:
+          FABRIC_TENANT_ID: ${{ secrets.tenant_id }}
+          FABRIC_CLIENT_ID: ${{ secrets.client_id }}
+          FABRIC_CLIENT_SECRET: ${{ secrets.client_secret }}
+          FABRIC_USERNAME: ${{ secrets.username }}
+          FABRIC_PASSWORD: ${{ secrets.password }}
+          FABRIC_PRINCIPAL_TYPE: ${{ inputs.principal_type }}
+          AUTHENTICATION_SCRIPT: ${{ inputs.authentication_script }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $workspaceRoot = [IO.Path]::GetFullPath($env:GITHUB_WORKSPACE)
+          if ([IO.Path]::IsPathRooted($env:AUTHENTICATION_SCRIPT)) {
+            [Console]::Error.WriteLine('ERROR: Authentication script path must be relative to the caller repository.')
+            exit 1
+          }
+          $scriptPath = [IO.Path]::GetFullPath((Join-Path $workspaceRoot $env:AUTHENTICATION_SCRIPT))
+          $workspacePrefix = $workspaceRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+          if ([IO.Path]::GetExtension($scriptPath) -ine '.ps1' -or
+              -not $scriptPath.StartsWith($workspacePrefix, [StringComparison]::Ordinal) -or
+              -not (Test-Path -LiteralPath $scriptPath -PathType Leaf)) {
+            [Console]::Error.WriteLine('ERROR: Authentication script must be a PowerShell file within the caller repository.')
+            exit 1
+          }
+          & $scriptPath
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -1,0 +1,41 @@
+name: Deploy to Microsoft Fabric (example)
+
+# Dev is updated from Git; test and prod use selective deployment pipelines.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      what_if:
+        description: Preview test and prod deployments only
+        required: false
+        type: boolean
+        default: false
+
+permissions: {}
+
+jobs:
+  deploy:
+    name: Deploy dev, test, and prod
+    permissions:
+      contents: read
+      id-token: write
+    uses: OWNER/amentum-devops-templates/.github/workflows/fabric-deploy.yml@<PINNED_COMMIT_SHA>
+    with:
+      azure_client_id: ${{ vars.AZURE_CLIENT_ID }}
+      azure_tenant_id: ${{ vars.AZURE_TENANT_ID }}
+      pipeline_name: PL_deploy_etl
+      dev_workspace_name: ws_analytics_etl_dev
+      dev_stage_name: Development
+      test_stage_name: Test
+      prod_stage_name: Production
+      dev_github_environment: fabric-dev
+      test_github_environment: fabric-test
+      prod_github_environment: fabric-prod
+      test_workspace_id: ${{ vars.FABRIC_TEST_WORKSPACE_ID }}
+      prod_workspace_id: ${{ vars.FABRIC_PROD_WORKSPACE_ID }}
+      notebook_name: PostDeployNotebook
+      excluded_resource_types: Reflex
+      excluded_folder_reference: WIP
+      timeout_minutes: 60
+      what_if: ${{ inputs.what_if == true }}

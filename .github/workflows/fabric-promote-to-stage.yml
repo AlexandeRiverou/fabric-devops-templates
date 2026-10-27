@@ -1,0 +1,127 @@
+name: Selectively deploy Microsoft Fabric deployment pipeline stage
+
+on:
+  workflow_call:
+    inputs:
+      azure_client_id:
+        description: Entra application (service principal) client ID; not a secret.
+        required: true
+        type: string
+      azure_tenant_id:
+        description: Entra tenant ID.
+        required: true
+        type: string
+      github_environment:
+        description: Protected caller-repository environment used for approvals and OIDC subject.
+        required: true
+        type: string
+      pipeline_name:
+        description: Microsoft Fabric deployment pipeline display name.
+        required: true
+        type: string
+      source_stage_name:
+        description: Source deployment pipeline stage display name (normally Development).
+        required: true
+        type: string
+      target_stage_name:
+        description: Target deployment pipeline stage display name (Test or Production).
+        required: true
+        type: string
+      excluded_resource_types:
+        description: Optional comma-separated item types to exclude (for example Reflex,Warehouse).
+        required: false
+        type: string
+        default: ""
+      excluded_folder_reference:
+        description: Optional workspace folder path to exclude, including descendants.
+        required: false
+        type: string
+        default: ""
+      timeout_minutes:
+        description: Maximum minutes to wait for the deployment operation.
+        required: false
+        type: number
+        default: 60
+      what_if:
+        description: Preview the items to deploy and exclude without sending the deploy request.
+        required: false
+        type: boolean
+        default: false
+
+permissions: {}
+
+jobs:
+  promote:
+    name: Selectively deploy Fabric stage content
+    if: ${{ github.event_name != 'pull_request' && github.event_name != 'pull_request_target' }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.github_environment }}
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: fabric-promotion-${{ github.repository }}-${{ inputs.pipeline_name }}-${{ inputs.target_stage_name }}
+      cancel-in-progress: false
+    steps:
+      - name: Require a protected caller ref
+        shell: pwsh
+        env:
+          REF_PROTECTED: ${{ github.ref_protected }}
+        run: |
+          if ($env:REF_PROTECTED -ne 'true') {
+            Write-Error 'ERROR: Fabric promotion must run from a protected branch or tag.'
+            exit 1
+          }
+
+      - name: Check out caller repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          persist-credentials: false
+
+      - name: Sign in to Azure with GitHub OIDC
+        uses: Azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2
+        with:
+          client-id: ${{ inputs.azure_client_id }}
+          tenant-id: ${{ inputs.azure_tenant_id }}
+          allow-no-subscriptions: true
+
+      - name: Authenticate and get Fabric access token
+        shell: pwsh
+        env:
+          FABRIC_TENANT_ID: ${{ inputs.azure_tenant_id }}
+          FABRIC_CLIENT_ID: ${{ inputs.azure_client_id }}
+          FABRIC_PRINCIPAL_TYPE: AzureCLI
+        run: |
+          & ./scripts/fabric/authenticate.ps1
+
+      - name: Selectively deploy content and wait for Fabric operation
+        shell: pwsh
+        env:
+          FABRIC_PIPELINE_NAME: ${{ inputs.pipeline_name }}
+          FABRIC_SOURCE_STAGE_NAME: ${{ inputs.source_stage_name }}
+          FABRIC_TARGET_STAGE_NAME: ${{ inputs.target_stage_name }}
+          FABRIC_EXCLUDED_RESOURCE_TYPES: ${{ inputs.excluded_resource_types }}
+          FABRIC_EXCLUDED_FOLDER_REFERENCE: ${{ inputs.excluded_folder_reference }}
+          FABRIC_TIMEOUT_MINUTES: ${{ inputs.timeout_minutes }}
+          FABRIC_WHAT_IF: ${{ inputs.what_if }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $scriptArguments = @{
+            deploymentPipelineName  = $env:FABRIC_PIPELINE_NAME
+            sourceStageName         = $env:FABRIC_SOURCE_STAGE_NAME
+            targetStageName         = $env:FABRIC_TARGET_STAGE_NAME
+            excludedResourceTypes   = @($env:FABRIC_EXCLUDED_RESOURCE_TYPES)
+            excludedFolderReference = $env:FABRIC_EXCLUDED_FOLDER_REFERENCE
+            timeoutMinutes          = [int]$env:FABRIC_TIMEOUT_MINUTES
+          }
+          if ($env:FABRIC_WHAT_IF -eq 'true') {
+            $scriptArguments['WhatIf'] = $true
+          }
+          & ./scripts/fabric/deployment-pipelines-selective-deploy.ps1 @scriptArguments
+
+      - name: Clear Fabric access token
+        if: ${{ always() }}
+        shell: pwsh
+        run: |
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value 'FABRIC_ACCESS_TOKEN='
+          Remove-Item Env:\FABRIC_ACCESS_TOKEN -ErrorAction SilentlyContinue

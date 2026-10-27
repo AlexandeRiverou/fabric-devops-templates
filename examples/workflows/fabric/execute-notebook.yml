@@ -1,0 +1,32 @@
+name: Execute Microsoft Fabric notebook (example)
+
+on:
+  workflow_dispatch:
+    inputs:
+      notebook_name:
+        description: Notebook display name
+        required: true
+        type: string
+      parameters_json:
+        description: Optional JSON object of notebook parameters
+        required: false
+        type: string
+        default: ""
+
+permissions: {}
+
+jobs:
+  execute:
+    name: Execute ${{ inputs.notebook_name }}
+    permissions:
+      contents: read
+      id-token: write
+    uses: OWNER/amentum-devops-templates/.github/workflows/fabric-execute-notebook.yml@<PINNED_COMMIT_SHA>
+    with:
+      azure_client_id: ${{ vars.AZURE_CLIENT_ID }}
+      azure_tenant_id: ${{ vars.AZURE_TENANT_ID }}
+      github_environment: fabric-dev
+      workspace_id: ${{ vars.FABRIC_WORKSPACE_ID }}
+      notebook_name: ${{ inputs.notebook_name }}
+      parameters_json: ${{ inputs.parameters_json }}
+      timeout_minutes: 30

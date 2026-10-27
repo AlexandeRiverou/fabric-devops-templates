@@ -1,0 +1,142 @@
+name: Sync Microsoft Fabric workspace from Git
+
+on:
+  workflow_call:
+    inputs:
+      azure_client_id:
+        description: Entra application (service principal) client ID; not a secret.
+        required: true
+        type: string
+      azure_tenant_id:
+        description: Entra tenant ID.
+        required: true
+        type: string
+      github_environment:
+        description: Protected caller-repository environment used for approvals and OIDC subject.
+        required: true
+        type: string
+      workspace_name:
+        description: Display name of the target Fabric workspace; resolved to its ID. Ignored when workspace_id is set.
+        required: false
+        type: string
+        default: ""
+      workspace_id:
+        description: Target Fabric workspace ID (GUID). Takes precedence over workspace_name.
+        required: false
+        type: string
+        default: ""
+      notebook_name:
+        description: Optional notebook to run after a successful sync; skipped when empty.
+        required: false
+        type: string
+        default: ""
+      timeout_minutes:
+        description: Maximum minutes per operation; must be 1-150 to leave time for sync and optional notebook within the six-hour job limit.
+        required: false
+        type: number
+        default: 30
+      polling_interval_seconds:
+        description: Seconds between notebook job status checks.
+        required: false
+        type: number
+        default: 30
+    outputs:
+      workspace_id:
+        description: Resolved Fabric workspace ID.
+        value: ${{ jobs.sync.outputs.workspace_id }}
+
+permissions: {}
+
+jobs:
+  sync:
+    name: Sync Fabric workspace
+    if: ${{ github.event_name != 'pull_request' && github.event_name != 'pull_request_target' }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.github_environment }}
+    timeout-minutes: 360
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      workspace_id: ${{ steps.list.outputs.workspace_id }}
+    concurrency:
+      group: fabric-sync-${{ github.repository }}
+      cancel-in-progress: false
+    steps:
+      - name: Validate operation timeout
+        shell: pwsh
+        env:
+          FABRIC_TIMEOUT_MINUTES: ${{ inputs.timeout_minutes }}
+        run: |
+          $timeout = 0
+          if (-not [int]::TryParse($env:FABRIC_TIMEOUT_MINUTES, [ref]$timeout) -or $timeout -lt 1 -or $timeout -gt 150) {
+            [Console]::Error.WriteLine('ERROR: timeout_minutes must be an integer between 1 and 150.')
+            exit 1
+          }
+
+      - name: Require a protected caller ref
+        shell: pwsh
+        env:
+          REF_PROTECTED: ${{ github.ref_protected }}
+        run: |
+          if ($env:REF_PROTECTED -ne 'true') {
+            [Console]::Error.WriteLine('ERROR: Fabric workspace sync must run from a protected branch or tag.')
+            exit 1
+          }
+
+      - name: Check out caller repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          persist-credentials: false
+
+      - name: Sign in to Azure with GitHub OIDC
+        uses: Azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2
+        with:
+          client-id: ${{ inputs.azure_client_id }}
+          tenant-id: ${{ inputs.azure_tenant_id }}
+          allow-no-subscriptions: true
+
+      - name: Authenticate and get Fabric access token
+        shell: pwsh
+        env:
+          FABRIC_TENANT_ID: ${{ inputs.azure_tenant_id }}
+          FABRIC_CLIENT_ID: ${{ inputs.azure_client_id }}
+          FABRIC_PRINCIPAL_TYPE: AzureCLI
+        run: |
+          & ./scripts/fabric/authenticate.ps1
+
+      - name: List workspaces and resolve target workspace ID
+        id: list
+        shell: pwsh
+        env:
+          FABRIC_WORKSPACE_ID: ${{ inputs.workspace_id }}
+          FABRIC_WORKSPACE_NAME: ${{ inputs.workspace_name }}
+        run: |
+          & ./scripts/fabric/list-workspaces.ps1
+
+      - name: Sync target workspace with Git
+        shell: pwsh
+        env:
+          FABRIC_WORKSPACE_ID: ${{ steps.list.outputs.workspace_id }}
+          FABRIC_TIMEOUT_MINUTES: ${{ inputs.timeout_minutes }}
+        run: |
+          & ./scripts/fabric/update-from-git.ps1
+
+      - name: Execute Fabric notebook
+        if: ${{ inputs.notebook_name != '' }}
+        shell: pwsh
+        env:
+          FABRIC_WORKSPACE_ID: ${{ steps.list.outputs.workspace_id }}
+          FABRIC_NOTEBOOK_NAME: ${{ inputs.notebook_name }}
+          FABRIC_TIMEOUT_MINUTES: ${{ inputs.timeout_minutes }}
+          FABRIC_POLL_INTERVAL_SECONDS: ${{ inputs.polling_interval_seconds }}
+          FABRIC_WAIT_FOR_COMPLETION: 'true'
+        run: |
+          & ./scripts/fabric/execute-notebook.ps1
+
+      - name: Clear Fabric access token
+        if: ${{ always() }}
+        shell: pwsh
+        run: |
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value 'FABRIC_ACCESS_TOKEN='
+          Remove-Item Env:\FABRIC_ACCESS_TOKEN -ErrorAction SilentlyContinue

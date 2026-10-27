@@ -1,0 +1,182 @@
+name: Deploy Microsoft Fabric (dev, test, prod)
+
+# Orchestrates the reusable Fabric workflows:
+#   dev  -> fabric-sync-workspace.yml (update workspace from Git, optional notebook)
+#   test -> fabric-promote-to-stage.yml (selective deployment dev -> test, optional notebook)
+#   prod -> fabric-promote-to-stage.yml (selective deployment test -> prod, optional notebook)
+# Nested calls cannot use a relative path (it would resolve in the caller repository),
+# so they reference this repository by name and ref.
+
+on:
+  workflow_call:
+    inputs:
+      azure_client_id:
+        description: Entra application (service principal) client ID; not a secret.
+        required: true
+        type: string
+      azure_tenant_id:
+        description: Entra tenant ID.
+        required: true
+        type: string
+      pipeline_name:
+        description: Fabric Deployment Pipeline display name.
+        required: true
+        type: string
+      dev_workspace_name:
+        description: Development workspace display name that is synced from Git.
+        required: true
+        type: string
+      dev_stage_name:
+        description: Deployment Pipeline stage name for dev.
+        required: false
+        type: string
+        default: Development
+      test_stage_name:
+        description: Deployment Pipeline stage name for test.
+        required: false
+        type: string
+        default: Test
+      prod_stage_name:
+        description: Deployment Pipeline stage name for prod.
+        required: false
+        type: string
+        default: Production
+      dev_github_environment:
+        description: Caller GitHub Environment for dev.
+        required: false
+        type: string
+        default: fabric-dev
+      test_github_environment:
+        description: Caller GitHub Environment for test.
+        required: false
+        type: string
+        default: fabric-test
+      prod_github_environment:
+        description: Caller GitHub Environment for prod; configure required reviewers.
+        required: false
+        type: string
+        default: fabric-prod
+      test_workspace_id:
+        description: Test workspace ID; required only to run the notebook after the test deployment.
+        required: false
+        type: string
+        default: ""
+      prod_workspace_id:
+        description: Prod workspace ID; required only to run the notebook after the prod deployment.
+        required: false
+        type: string
+        default: ""
+      notebook_name:
+        description: Notebook to run after each environment is updated; empty skips notebooks.
+        required: false
+        type: string
+        default: ""
+      excluded_resource_types:
+        description: Comma-separated item types excluded from test and prod deployments.
+        required: false
+        type: string
+        default: ""
+      excluded_folder_reference:
+        description: Workspace folder path excluded, with descendants, from test and prod deployments.
+        required: false
+        type: string
+        default: ""
+      timeout_minutes:
+        description: Maximum minutes to wait for each long-running operation.
+        required: false
+        type: number
+        default: 60
+      what_if:
+        description: Preview test and prod deployments without sending deploy requests.
+        required: false
+        type: boolean
+        default: false
+
+permissions: {}
+
+jobs:
+  dev:
+    name: Dev - update from Git
+    permissions:
+      contents: read
+      id-token: write
+    uses: AlexandeRiverou/amentum-devops-templates/.github/workflows/fabric-sync-workspace.yml@main
+    with:
+      azure_client_id: ${{ inputs.azure_client_id }}
+      azure_tenant_id: ${{ inputs.azure_tenant_id }}
+      github_environment: ${{ inputs.dev_github_environment }}
+      workspace_name: ${{ inputs.dev_workspace_name }}
+      notebook_name: ${{ inputs.notebook_name }}
+      timeout_minutes: ${{ inputs.timeout_minutes }}
+
+  test:
+    name: Test - selective deployment
+    needs: dev
+    permissions:
+      contents: read
+      id-token: write
+    uses: AlexandeRiverou/amentum-devops-templates/.github/workflows/fabric-promote-to-stage.yml@main
+    with:
+      azure_client_id: ${{ inputs.azure_client_id }}
+      azure_tenant_id: ${{ inputs.azure_tenant_id }}
+      github_environment: ${{ inputs.test_github_environment }}
+      pipeline_name: ${{ inputs.pipeline_name }}
+      source_stage_name: ${{ inputs.dev_stage_name }}
+      target_stage_name: ${{ inputs.test_stage_name }}
+      excluded_resource_types: ${{ inputs.excluded_resource_types }}
+      excluded_folder_reference: ${{ inputs.excluded_folder_reference }}
+      timeout_minutes: ${{ inputs.timeout_minutes }}
+      what_if: ${{ inputs.what_if }}
+
+  test-notebook:
+    name: Test - run notebook
+    needs: test
+    if: ${{ inputs.notebook_name != '' && inputs.test_workspace_id != '' && !inputs.what_if }}
+    permissions:
+      contents: read
+      id-token: write
+    uses: AlexandeRiverou/amentum-devops-templates/.github/workflows/fabric-execute-notebook.yml@main
+    with:
+      azure_client_id: ${{ inputs.azure_client_id }}
+      azure_tenant_id: ${{ inputs.azure_tenant_id }}
+      github_environment: ${{ inputs.test_github_environment }}
+      workspace_id: ${{ inputs.test_workspace_id }}
+      notebook_name: ${{ inputs.notebook_name }}
+      timeout_minutes: ${{ inputs.timeout_minutes }}
+
+  prod:
+    name: Prod - selective deployment
+    needs: [test, test-notebook]
+    # Run when test-notebook was skipped, but never after a failure.
+    if: ${{ !cancelled() && needs.test.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.test-notebook.result) }}
+    permissions:
+      contents: read
+      id-token: write
+    uses: AlexandeRiverou/amentum-devops-templates/.github/workflows/fabric-promote-to-stage.yml@main
+    with:
+      azure_client_id: ${{ inputs.azure_client_id }}
+      azure_tenant_id: ${{ inputs.azure_tenant_id }}
+      github_environment: ${{ inputs.prod_github_environment }}
+      pipeline_name: ${{ inputs.pipeline_name }}
+      source_stage_name: ${{ inputs.test_stage_name }}
+      target_stage_name: ${{ inputs.prod_stage_name }}
+      excluded_resource_types: ${{ inputs.excluded_resource_types }}
+      excluded_folder_reference: ${{ inputs.excluded_folder_reference }}
+      timeout_minutes: ${{ inputs.timeout_minutes }}
+      what_if: ${{ inputs.what_if }}
+
+  prod-notebook:
+    name: Prod - run notebook
+    needs: prod
+    if: ${{ inputs.notebook_name != '' && inputs.prod_workspace_id != '' && !inputs.what_if }}
+    permissions:
+      contents: read
+      id-token: write
+    uses: AlexandeRiverou/amentum-devops-templates/.github/workflows/fabric-execute-notebook.yml@main
+    with:
+      azure_client_id: ${{ inputs.azure_client_id }}
+      azure_tenant_id: ${{ inputs.azure_tenant_id }}
+      github_environment: ${{ inputs.prod_github_environment }}
+      workspace_id: ${{ inputs.prod_workspace_id }}
+      notebook_name: ${{ inputs.notebook_name }}
+      timeout_minutes: ${{ inputs.timeout_minutes }}

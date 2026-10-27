@@ -1,0 +1,26 @@
+name: Sync Microsoft Fabric workspace from Git (example)
+
+on:
+  workflow_dispatch:
+    inputs:
+      notebook_name:
+        description: Optional notebook to run after the sync
+        required: false
+        type: string
+        default: ""
+
+permissions: {}
+
+jobs:
+  sync:
+    name: Sync Fabric workspace
+    permissions:
+      contents: read
+      id-token: write
+    uses: OWNER/amentum-devops-templates/.github/workflows/fabric-sync-workspace.yml@<PINNED_COMMIT_SHA>
+    with:
+      azure_client_id: ${{ vars.AZURE_CLIENT_ID }}
+      azure_tenant_id: ${{ vars.AZURE_TENANT_ID }}
+      github_environment: fabric-dev
+      workspace_name: ${{ vars.FABRIC_WORKSPACE_NAME }}
+      notebook_name: ${{ inputs.notebook_name }}
