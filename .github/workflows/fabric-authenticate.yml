@@ -12,11 +12,6 @@ on:
         description: Caller repository environment that holds the secrets.
         required: true
         type: string
-      authentication_script:
-        description: Path to the PowerShell authentication script in the caller's repository.
-        required: false
-        type: string
-        default: scripts/fabric/authenticate.ps1
     secrets:
       tenant_id:
         description: Entra tenant ID.
@@ -59,15 +54,10 @@ jobs:
           FABRIC_USERNAME: ${{ secrets.username }}
           FABRIC_PASSWORD: ${{ secrets.password }}
           FABRIC_PRINCIPAL_TYPE: ${{ inputs.principal_type }}
-          AUTHENTICATION_SCRIPT: ${{ inputs.authentication_script }}
         run: |
           $ErrorActionPreference = 'Stop'
           $workspaceRoot = [IO.Path]::GetFullPath($env:GITHUB_WORKSPACE)
-          if ([IO.Path]::IsPathRooted($env:AUTHENTICATION_SCRIPT)) {
-            [Console]::Error.WriteLine('ERROR: Authentication script path must be relative to the caller repository.')
-            exit 1
-          }
-          $scriptPath = [IO.Path]::GetFullPath((Join-Path $workspaceRoot $env:AUTHENTICATION_SCRIPT))
+          $scriptPath = [IO.Path]::GetFullPath((Join-Path $workspaceRoot 'scripts/fabric/authenticate.ps1'))
           $workspacePrefix = $workspaceRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
           if ([IO.Path]::GetExtension($scriptPath) -ine '.ps1' -or
               -not $scriptPath.StartsWith($workspacePrefix, [StringComparison]::Ordinal) -or
