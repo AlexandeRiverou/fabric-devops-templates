@@ -1,0 +1,34 @@
+name: Deploy package to Azure App Service (example)
+
+on:
+  workflow_dispatch:
+    inputs:
+      package_path:
+        description: Repository-relative path to an already-built package present in this checkout.
+        required: true
+        type: string
+      slot_name:
+        description: Existing deployment slot; leave empty for production.
+        required: false
+        type: string
+        default: ""
+
+permissions: {}
+
+jobs:
+  deploy:
+    name: Deploy to Azure App Service
+    permissions:
+      contents: read
+      id-token: write
+    # Keep these AZURE_* values as caller repository variables; the called
+    # workflow applies the azure-production Environment and its protections.
+    uses: OWNER/fabric-devops-templates/.github/workflows/azure-app-service-deploy.yml@<PINNED_COMMIT_SHA>
+    with:
+      azure_client_id: ${{ vars.AZURE_CLIENT_ID }}
+      azure_tenant_id: ${{ vars.AZURE_TENANT_ID }}
+      azure_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      github_environment: azure-production
+      app_name: ${{ vars.AZURE_WEBAPP_NAME }}
+      package_path: ${{ inputs.package_path }}
+      slot_name: ${{ inputs.slot_name }}

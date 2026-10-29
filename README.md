@@ -323,6 +323,27 @@ Future components can add their own reusable workflow and example using the
 `fabric-promote-to-stage.yml`) without changing the existing Fabric
 deployment contract.
 
+### Azure App Service deployment
+
+The reusable `.github/workflows/azure-app-service-deploy.yml` workflow deploys a
+pre-built package to an Azure App Service, optionally to a deployment slot. Copy
+`examples/workflows/azure/app-service-deploy.yml` to the consuming repository and
+replace its example repository reference and placeholder commit SHA with the
+reviewed template repository and commit. Build and test the application before
+calling the reusable deployment workflow.
+
+The deployment uses GitHub OIDC through `azure/login`; it does not require a
+publish-profile secret or client secret. Configure caller repository variables
+`AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, and
+`AZURE_WEBAPP_NAME`, and configure a matching
+federated identity credential for the caller repository and protected GitHub
+Environment. The Entra identity needs only the `Website Contributor` role scoped to
+the target App Service. Create and protect the GitHub Environment named by the
+workflow input, restricting deployment branches and requiring approvals as
+appropriate, and protect the deployment branch or tag with a ruleset or branch
+protection rule. The workflow's `id-token: write` permission is limited to the
+deployment job; do not grant it to build or pull-request jobs.
+
 ### Verified Microsoft references
 
 - [fabric-cicd project](https://github.com/microsoft/fabric-cicd) and its
