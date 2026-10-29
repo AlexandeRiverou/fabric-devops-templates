@@ -1,0 +1,102 @@
+name: Deploy package to Azure App Service
+
+on:
+  workflow_call:
+    inputs:
+      azure_client_id:
+        description: Entra application client ID configured for GitHub OIDC; not a secret.
+        required: true
+        type: string
+      azure_tenant_id:
+        description: Entra tenant ID.
+        required: true
+        type: string
+      azure_subscription_id:
+        description: Azure subscription containing the target App Service.
+        required: true
+        type: string
+      github_environment:
+        description: Caller-repository Environment for approvals and the OIDC subject.
+        required: true
+        type: string
+      app_name:
+        description: Name of the existing Azure App Service.
+        required: true
+        type: string
+      package_path:
+        description: Path, relative to the caller repository root, to the already-built deployment package.
+        required: true
+        type: string
+      slot_name:
+        description: Existing deployment slot; leave empty to deploy to production.
+        required: false
+        type: string
+        default: ""
+
+permissions: {}
+
+# Configure the OIDC identity with Website Contributor at the target App Service
+# scope (and only the target slot scope if access is granted per slot).
+jobs:
+  deploy:
+    name: Deploy to ${{ inputs.app_name }}
+    if: ${{ github.event_name != 'pull_request' && github.event_name != 'pull_request_target' }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.github_environment }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: azure-app-service-deploy-${{ github.repository }}-${{ inputs.app_name }}
+      cancel-in-progress: false
+    steps:
+      - name: Require a protected caller ref
+        shell: pwsh
+        env:
+          REF_PROTECTED: ${{ github.ref_protected }}
+        run: |
+          if ($env:REF_PROTECTED -ne 'true') {
+            [Console]::Error.WriteLine('ERROR: App Service deployment must run from a protected branch or tag.')
+            exit 1
+          }
+
+      - name: Check out caller repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          persist-credentials: false
+
+      - name: Validate deployment package path
+        shell: pwsh
+        env:
+          APP_SERVICE_PACKAGE_PATH: ${{ inputs.package_path }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $workspaceRoot = [IO.Path]::GetFullPath($env:GITHUB_WORKSPACE).TrimEnd([IO.Path]::DirectorySeparatorChar)
+          $workspacePrefix = $workspaceRoot + [IO.Path]::DirectorySeparatorChar
+          $packagePath = $env:APP_SERVICE_PACKAGE_PATH
+          if ([string]::IsNullOrWhiteSpace($packagePath) -or [IO.Path]::IsPathRooted($packagePath)) {
+            [Console]::Error.WriteLine('ERROR: package_path must be a non-empty path relative to the caller repository.')
+            exit 1
+          }
+          $resolvedPackagePath = [IO.Path]::GetFullPath((Join-Path $workspaceRoot $packagePath))
+          if (-not $resolvedPackagePath.StartsWith($workspacePrefix, [StringComparison]::Ordinal) -or
+              -not (Test-Path -LiteralPath $resolvedPackagePath)) {
+            [Console]::Error.WriteLine('ERROR: package_path must resolve to an existing file or directory within the caller repository.')
+            exit 1
+          }
+          Write-Host 'INFO: Deployment package path is present in the caller repository.'
+
+      - name: Sign in to Azure with GitHub OIDC
+        uses: Azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
+        with:
+          client-id: ${{ inputs.azure_client_id }}
+          tenant-id: ${{ inputs.azure_tenant_id }}
+          subscription-id: ${{ inputs.azure_subscription_id }}
+
+      - name: Deploy package to Azure App Service
+        uses: Azure/webapps-deploy@e8d44d20a4b02f733385c4755aca052069eeb988 # v3.0.5
+        with:
+          app-name: ${{ inputs.app_name }}
+          package: ${{ inputs.package_path }}
+          slot-name: ${{ inputs.slot_name }}
